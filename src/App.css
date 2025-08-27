@@ -1,0 +1,92 @@
+:root{
+  --header-h: 60px;
+  --sidebar-open: 220px;
+  --sidebar-closed: 60px;
+
+  /* your colors */
+  --bg: #47af83;        /* page background (your green) */
+  --header-bg: #004b87; /* header AKU blue */
+}
+
+body{
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  color: white;
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Header: fixed full width */
+.header{
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--header-h);
+  background: var(--header-bg);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  box-shadow: 0 2px 5px rgba(0,0,0,.2);
+  z-index: 1000;
+}
+
+/* Menu icon always flush-left */
+.menu-icon{ cursor: pointer; }
+
+/* Sidebar: fixed under the header */
+aside{
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-closed);
+  background: #1f1f1f;
+  color: #fff;
+  overflow: hidden;
+  transition: width .25s ease;
+  z-index: 900;
+}
+aside.open{ width: var(--sidebar-open); }
+
+/* Main content shifts only (this is the “cascade”) */
+.content{
+  margin-top: var(--header-h);
+  margin-left: var(--sidebar-closed);
+  padding: 20px;
+  transition: margin-left .25s ease;
+}
+.content.shifted{ margin-left: var(--sidebar-open); }
+
+/* Sidebar items (prevents purple links + shows icons nicely) */
+.sidebar-item{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: white;
+  font-size: 14px;
+  transition: background .2s ease;
+}
+.sidebar-item:hover{ background: rgba(255,255,255,.1); cursor: pointer; }
+.sidebar-item svg{ flex-shrink: 0; }
+
+/* Home page cards (for a nicer look) */
+.home-container { padding: 0; } /* padding handled by .content */
+.welcome-card{
+  background: white; color: #333;
+  padding: 20px; border-radius: 10px; margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.1);
+}
+.welcome-card h1{ margin: 0 0 10px; color: var(--header-bg); }
+.stats-grid{
+  display: grid; gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.stat-card{
+  background: white; color: var(--header-bg);
+  padding: 20px; border-radius: 10px; text-align: center; font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0,0,0,.1);
+}
+.stat-card h2{ margin: 0; font-size: 2rem; }
