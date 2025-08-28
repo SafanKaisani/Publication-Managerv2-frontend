@@ -8,12 +8,15 @@
   --header-bg: #004b87; /* header AKU blue */
 }
 
+* { box-sizing: border-box; }
+
 body{
   margin: 0;
   padding: 0;
   background-color: var(--bg);
   color: white;
   font-family: 'Montserrat', sans-serif;
+  min-height: 100vh;
 }
 
 /* Header: fixed full width */
@@ -34,32 +37,45 @@ body{
 /* Menu icon always flush-left */
 .menu-icon{ cursor: pointer; }
 
-/* Sidebar: fixed under the header */
+/* Sidebar: fixed under the header
+   - explicit height calc(100vh - header) for consistent scrollable area
+   - overflow-y: scroll makes the scrollbar always visible
+   - extra bottom padding + pseudo-element gives additional scroll room
+*/
 aside{
   position: fixed;
   top: var(--header-h);
   left: 0;
-  bottom: 0;
+  /* explicit height avoids rare bottom clipping issues */
+  height: calc(100vh - var(--header-h));
   width: var(--sidebar-closed);
   background: #1f1f1f;
   color: #fff;
-  overflow: hidden;
+  overflow-y: scroll;           /* always-visible vertical scrollbar */
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; /* smooth scrolling on mobile */
+  scrollbar-gutter: stable;     /* reserve scrollbar gutter to avoid layout shift */
   transition: width .25s ease;
   z-index: 900;
+  padding-top: 6px;             /* small top padding */
+  padding-bottom: 200px;        /* <-- larger bottom padding to allow extra scroll */
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.03);
+  overscroll-behavior: contain;
 }
+
+/* Extra invisible spacer at the end of the sidebar to guarantee scroll space */
+aside::after {
+  content: "";
+  display: block;
+  height: 200px; /* same as padding-bottom: gives visible empty area when scrolled */
+  width: 1px;
+  pointer-events: none;
+}
+
 aside.open{ width: var(--sidebar-open); }
 
-/* Main content shifts only (this is the “cascade”) */
-.content{
-  margin-top: var(--header-h);
-  margin-left: var(--sidebar-closed);
-  padding: 20px;
-  transition: margin-left .25s ease;
-}
-.content.shifted{ margin-left: var(--sidebar-open); }
-
-/* Sidebar items (prevents purple links + shows icons nicely) */
-.sidebar-item{
+/* Ensure sidebar children stack vertically and stretch full width */
+aside .sidebar-item{
   display: flex;
   align-items: center;
   gap: 12px;
@@ -68,9 +84,56 @@ aside.open{ width: var(--sidebar-open); }
   color: white;
   font-size: 14px;
   transition: background .2s ease;
+  width: 100%;
+  white-space: nowrap; /* keep labels on single line */
+  box-sizing: border-box;
 }
-.sidebar-item:hover{ background: rgba(255,255,255,.1); cursor: pointer; }
+.sidebar-item:hover{ background: rgba(255,255,255,.06); cursor: pointer; }
 .sidebar-item svg{ flex-shrink: 0; }
+
+/* defensive styling for text */
+.sidebar-item span {
+  display: inline-block;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Custom scrollbar for sidebar (WebKit browsers) */
+aside::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+aside::-webkit-scrollbar-track {
+  background: #1f1f1f; /* match sidebar background */
+}
+
+aside::-webkit-scrollbar-thumb {
+  background-color: #47af83; /* your page green */
+  border-radius: 6px;
+  border: 2px solid #1f1f1f; /* padding effect */
+}
+
+aside::-webkit-scrollbar-thumb:hover {
+  background-color: #35a06a; /* slightly darker on hover */
+}
+
+/* Firefox scrollbar styling */
+aside {
+  scrollbar-width: thin;
+  scrollbar-color: #47af83 #1f1f1f;
+}
+
+/* Main content shifts only (this is the “cascade”) */
+.content{
+  margin-top: var(--header-h);
+  margin-left: var(--sidebar-closed);
+  padding: 20px;
+  transition: margin-left .25s ease;
+  min-height: calc(100vh - var(--header-h));
+}
+.content.shifted{ margin-left: var(--sidebar-open); }
 
 /* Home page cards (for a nicer look) */
 .home-container { padding: 0; } /* padding handled by .content */
