@@ -6,14 +6,15 @@ function ExportFilteredExcel() {
   const [year, setYear] = useState("");
   const [startYear, setStartYear] = useState("");
   const [endYear, setEndYear] = useState("");
+  const [affiliations, setAffiliations] = useState([]);
+  const [pubTypes, setPubTypes] = useState([]);
   const [fileReady, setFileReady] = useState(false);
 
-  const handleExport = () => {
-    if (!faculty) {
-      alert("Please enter Faculty name.");
-      return;
-    }
+  // ✅ Options (same as PDF export)
+  const pubTypeOptions = ["Book Chapter", "Article", "Book"];
+  const affiliationOptions = ["IED", "Alumni/Student", "External", "PDCN", "PDCC"];
 
+  const handleExport = () => {
     if (year && (startYear || endYear)) {
       alert("Please either enter a single Year OR a Start + End Year, not both.");
       return;
@@ -28,17 +29,26 @@ function ExportFilteredExcel() {
     setFileReady(true);
   };
 
+  const handleCheckboxChange = (value, state, setState) => {
+    if (state.includes(value)) {
+      setState(state.filter((item) => item !== value));
+    } else {
+      setState([...state, value]);
+    }
+  };
+
   return (
     <div style={{ padding: "20px" }}>
       <h2>Export Filtered Excel</h2>
       <p style={{ color: "#555" }}>
-        Enter faculty name, then choose either a single year OR a range of years (1993–2025).
+        Enter faculty name (optional), then choose either a single year OR a range of years (1993–2025).
+        Optionally filter by Affiliations and Publication Types.
       </p>
 
-      {/* Faculty */}
+      {/* Faculty (optional) */}
       <input
         type="text"
-        placeholder="Faculty (e.g., Sajid Ali)"
+        placeholder="Faculty (optional, e.g., Sajid Ali)"
         value={faculty}
         onChange={(e) => setFaculty(e.target.value)}
         style={inputStyle}
@@ -79,6 +89,40 @@ function ExportFilteredExcel() {
         style={inputStyle}
       />
 
+      {/* Publication Types (checkboxes) */}
+      <label style={{ fontWeight: "bold", marginTop: "10px", display: "block" }}>
+        Publication Types
+      </label>
+      <div style={checkboxGroupStyle}>
+        {pubTypeOptions.map((type) => (
+          <label key={type} style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={pubTypes.includes(type)}
+              onChange={() => handleCheckboxChange(type, pubTypes, setPubTypes)}
+            />
+            {type}
+          </label>
+        ))}
+      </div>
+
+      {/* Affiliations (checkboxes) */}
+      <label style={{ fontWeight: "bold", marginTop: "10px", display: "block" }}>
+        Affiliations
+      </label>
+      <div style={checkboxGroupStyle}>
+        {affiliationOptions.map((aff) => (
+          <label key={aff} style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={affiliations.includes(aff)}
+              onChange={() => handleCheckboxChange(aff, affiliations, setAffiliations)}
+            />
+            {aff}
+          </label>
+        ))}
+      </div>
+
       {/* Buttons */}
       {!fileReady ? (
         <button onClick={handleExport} style={buttonStyle}>
@@ -87,7 +131,7 @@ function ExportFilteredExcel() {
       ) : (
         <a
           href="#"
-          download={`${faculty}_filtered_publications.xlsx`}
+          download={`${faculty || "ALL"}_filtered_publications.xlsx`}
           style={{ ...buttonStyle, background: "green", textDecoration: "none" }}
         >
           ⬇️ Download Excel
@@ -105,6 +149,20 @@ const inputStyle = {
   border: "1px solid #ccc",
   fontSize: "14px",
   fontStyle: "italic",
+};
+
+const checkboxGroupStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  margin: "10px 0",
+};
+
+const checkboxLabelStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "5px",
+  fontSize: "14px",
 };
 
 const buttonStyle = {

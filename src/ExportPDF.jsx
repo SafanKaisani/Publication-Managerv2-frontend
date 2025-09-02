@@ -1,42 +1,76 @@
-// ExportPDF.jsx
+// ExportFilteredPDF.jsx
 import React, { useState } from "react";
 
-function ExportPDF() {
-  const [name, setName] = useState("");
+function ExportFilteredPDF() {
+  const [faculty, setFaculty] = useState("");
+  const [year, setYear] = useState("");
   const [startYear, setStartYear] = useState("");
   const [endYear, setEndYear] = useState("");
+  const [affiliations, setAffiliations] = useState([]);
+  const [pubTypes, setPubTypes] = useState([]);
   const [fileReady, setFileReady] = useState(false);
 
+  // ✅ Options
+  const pubTypeOptions = ["Book Chapter", "Article", "Book"];
+  const affiliationOptions = ["IED", "Alumni/Student", "External", "PDCN", "PDCC"];
+
   const handleExport = () => {
-    // Placeholder: later this will call your backend PDF export API
-    if (name && startYear && endYear) {
-      setFileReady(true);
+    if (year && (startYear || endYear)) {
+      alert("Please either enter a single Year OR a Start + End Year, not both.");
+      return;
+    }
+
+    if (!year && (!startYear || !endYear)) {
+      alert("Please enter either a Year OR both Start Year and End Year.");
+      return;
+    }
+
+    // ✅ Later connect to backend API
+    setFileReady(true);
+  };
+
+  const handleCheckboxChange = (value, state, setState) => {
+    if (state.includes(value)) {
+      setState(state.filter((item) => item !== value));
     } else {
-      alert("Please enter Name, Start Year, and End Year.");
+      setState([...state, value]);
     }
   };
 
   return (
     <div style={{ padding: "20px" }}>
-      <h2>Export PDF Report</h2>
+      <h2>Export Filtered PDF</h2>
       <p style={{ color: "#555" }}>
-        Enter the person's name and a year range (1993–2025). Then request a PDF
-        of their work during that period.
+        Enter faculty name (optional), then choose either a single year OR a range of years (1993–2025).
+        Optionally filter by Affiliations and Publication Types.
       </p>
 
-      {/* Name input */}
+      {/* Faculty (optional) */}
       <input
         type="text"
-        placeholder="Name (e.g., Sajid Ali)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
+        placeholder="Faculty (optional, e.g., Sajid Ali)"
+        value={faculty}
+        onChange={(e) => setFaculty(e.target.value)}
         style={inputStyle}
       />
 
-      {/* Start Year input */}
+      {/* Year (single) */}
       <input
         type="number"
-        placeholder="Start Year (e.g., 2000)"
+        placeholder="Year (e.g., 2020)"
+        value={year}
+        onChange={(e) => setYear(e.target.value)}
+        min={1993}
+        max={2025}
+        style={inputStyle}
+      />
+
+      <div style={{ textAlign: "center", margin: "10px 0" }}>— OR —</div>
+
+      {/* Start Year */}
+      <input
+        type="number"
+        placeholder="Start Year (e.g., 2015)"
         value={startYear}
         onChange={(e) => setStartYear(e.target.value)}
         min={1993}
@@ -44,7 +78,7 @@ function ExportPDF() {
         style={inputStyle}
       />
 
-      {/* End Year input */}
+      {/* End Year */}
       <input
         type="number"
         placeholder="End Year (e.g., 2025)"
@@ -55,7 +89,41 @@ function ExportPDF() {
         style={inputStyle}
       />
 
-      {/* Request / Download buttons */}
+      {/* Publication Types */}
+      <label style={{ fontWeight: "bold", marginTop: "10px", display: "block" }}>
+        Publication Types
+      </label>
+      <div style={checkboxGroupStyle}>
+        {pubTypeOptions.map((type) => (
+          <label key={type} style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={pubTypes.includes(type)}
+              onChange={() => handleCheckboxChange(type, pubTypes, setPubTypes)}
+            />
+            {type}
+          </label>
+        ))}
+      </div>
+
+      {/* Affiliations */}
+      <label style={{ fontWeight: "bold", marginTop: "10px", display: "block" }}>
+        Affiliations
+      </label>
+      <div style={checkboxGroupStyle}>
+        {affiliationOptions.map((aff) => (
+          <label key={aff} style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={affiliations.includes(aff)}
+              onChange={() => handleCheckboxChange(aff, affiliations, setAffiliations)}
+            />
+            {aff}
+          </label>
+        ))}
+      </div>
+
+      {/* Buttons */}
       {!fileReady ? (
         <button onClick={handleExport} style={buttonStyle}>
           Request PDF
@@ -63,7 +131,7 @@ function ExportPDF() {
       ) : (
         <a
           href="#"
-          download={`${name}_publications.pdf`}
+          download={`${faculty || "ALL"}_filtered_publications.pdf`}
           style={{ ...buttonStyle, background: "green", textDecoration: "none" }}
         >
           ⬇️ Download PDF
@@ -73,7 +141,6 @@ function ExportPDF() {
   );
 }
 
-// Input styling
 const inputStyle = {
   width: "100%",
   padding: "10px",
@@ -84,7 +151,20 @@ const inputStyle = {
   fontStyle: "italic",
 };
 
-// Button styling
+const checkboxGroupStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  margin: "10px 0",
+};
+
+const checkboxLabelStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "5px",
+  fontSize: "14px",
+};
+
 const buttonStyle = {
   padding: "10px 20px",
   border: "none",
@@ -96,4 +176,4 @@ const buttonStyle = {
   fontSize: "14px",
 };
 
-export default ExportPDF;
+export default ExportFilteredPDF;
