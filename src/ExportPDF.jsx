@@ -8,25 +8,74 @@ function ExportFilteredPDF() {
   const [endYear, setEndYear] = useState("");
   const [affiliations, setAffiliations] = useState([]);
   const [pubTypes, setPubTypes] = useState([]);
-  const [fileReady, setFileReady] = useState(false);
+  const [fileUrl, setFileUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // ✅ Options
+  const BASE_URL = "http://127.0.0.1:8000"; // backend
+  const USERNAME = "admin"; 
+  const PASSWORD = "supersecretpassword";
+
   const pubTypeOptions = ["Book Chapter", "Article", "Book"];
-  const affiliationOptions = ["IED", "Alumni/Student", "External", "PDCN", "PDCC"];
+  const affiliationOptions = [
+    "IED",
+    "Alumni/Student",
+    "External",
+    "PDCN",
+    "PDCC",
+  ];
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (year && (startYear || endYear)) {
-      alert("Please either enter a single Year OR a Start + End Year, not both.");
+      alert("Enter either a single Year OR a Start + End Year, not both.");
       return;
     }
 
     if (!year && (!startYear || !endYear)) {
-      alert("Please enter either a Year OR both Start Year and End Year.");
+      alert("Enter either a Year OR both Start Year and End Year.");
       return;
     }
 
-    // ✅ Later connect to backend API
-    setFileReady(true);
+    let start = startYear ? parseInt(startYear) : 0;
+    let end = endYear ? parseInt(endYear) : 0;
+
+    if (year) {
+      start = parseInt(year);
+      end = parseInt(year);
+    }
+
+    const payload = {
+      name: faculty || "string",
+      start_year: start,
+      end_year: end,
+      publication_types: pubTypes.length > 0 ? pubTypes : ["string"],
+      affiliations: affiliations.length > 0 ? affiliations : ["string"],
+    };
+
+    try {
+      setLoading(true);
+      setFileUrl(null);
+
+      const response = await fetch(`${BASE_URL}/export-person-pubs-pdf`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Basic " + btoa(`${USERNAME}:${PASSWORD}`),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error("Export failed");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      setFileUrl(url);
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCheckboxChange = (value, state, setState) => {
@@ -37,15 +86,32 @@ function ExportFilteredPDF() {
     }
   };
 
+  const clearDownload = () => {
+    if (fileUrl) {
+      window.URL.revokeObjectURL(fileUrl);
+    }
+    setFileUrl(null);
+  };
+
+  const resetAll = () => {
+    clearDownload();
+    setFaculty("");
+    setYear("");
+    setStartYear("");
+    setEndYear("");
+    setAffiliations([]);
+    setPubTypes([]);
+  };
+
   return (
     <div style={{ padding: "20px" }}>
       <h2>Export Filtered PDF</h2>
       <p style={{ color: "#555" }}>
-        Enter faculty name (optional), then choose either a single year OR a range of years (1993–2025).
-        Optionally filter by Affiliations and Publication Types.
+        Enter faculty name (optional), then choose either a single year OR a
+        range of years (1993–2025). Optionally filter by Affiliations and
+        Publication Types.
       </p>
 
-      {/* Faculty (optional) */}
       <input
         type="text"
         placeholder="Faculty (optional, e.g., Sajid Ali)"
@@ -54,7 +120,6 @@ function ExportFilteredPDF() {
         style={inputStyle}
       />
 
-      {/* Year (single) */}
       <input
         type="number"
         placeholder="Year (e.g., 2020)"
@@ -67,7 +132,6 @@ function ExportFilteredPDF() {
 
       <div style={{ textAlign: "center", margin: "10px 0" }}>— OR —</div>
 
-      {/* Start Year */}
       <input
         type="number"
         placeholder="Start Year (e.g., 2015)"
@@ -78,7 +142,6 @@ function ExportFilteredPDF() {
         style={inputStyle}
       />
 
-      {/* End Year */}
       <input
         type="number"
         placeholder="End Year (e.g., 2025)"
@@ -89,7 +152,6 @@ function ExportFilteredPDF() {
         style={inputStyle}
       />
 
-      {/* Publication Types */}
       <label style={{ fontWeight: "bold", marginTop: "10px", display: "block" }}>
         Publication Types
       </label>
@@ -99,14 +161,15 @@ function ExportFilteredPDF() {
             <input
               type="checkbox"
               checked={pubTypes.includes(type)}
-              onChange={() => handleCheckboxChange(type, pubTypes, setPubTypes)}
+              onChange={() =>
+                handleCheckboxChange(type, pubTypes, setPubTypes)
+              }
             />
             {type}
           </label>
         ))}
       </div>
 
-      {/* Affiliations */}
       <label style={{ fontWeight: "bold", marginTop: "10px", display: "block" }}>
         Affiliations
       </label>
@@ -116,26 +179,46 @@ function ExportFilteredPDF() {
             <input
               type="checkbox"
               checked={affiliations.includes(aff)}
-              onChange={() => handleCheckboxChange(aff, affiliations, setAffiliations)}
+              onChange={() =>
+                handleCheckboxChange(aff, affiliations, setAffiliations)
+              }
             />
             {aff}
           </label>
         ))}
       </div>
 
-      {/* Buttons */}
-      {!fileReady ? (
-        <button onClick={handleExport} style={buttonStyle}>
-          Request PDF
+      {!fileUrl ? (
+        <button onClick={handleExport} style={buttonStyle} disabled={loading}>
+          {loading ? "Processing..." : "Request PDF"}
         </button>
       ) : (
-        <a
-          href="#"
-          download={`${faculty || "ALL"}_filtered_publications.pdf`}
-          style={{ ...buttonStyle, background: "green", textDecoration: "none" }}
-        >
-          ⬇️ Download PDF
-        </a>
+        <div style={{ marginTop: "15px" }}>
+          <a
+            href={fileUrl}
+            download={`${faculty || "ALL"}_filtered_publications.pdf`}
+            style={{
+              ...buttonStyle,
+              background: "green",
+              textDecoration: "none",
+              marginRight: "10px",
+            }}
+          >
+            ⬇️ Download PDF
+          </a>
+          <button
+            onClick={clearDownload}
+            style={{ ...buttonStyle, background: "gray", marginRight: "10px" }}
+          >
+            Clear
+          </button>
+          <button
+            onClick={resetAll}
+            style={{ ...buttonStyle, background: "darkred" }}
+          >
+            Refresh All
+          </button>
+        </div>
       )}
     </div>
   );

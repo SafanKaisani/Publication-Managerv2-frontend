@@ -1,100 +1,192 @@
 // FacultyStats.jsx
 import React, { useState } from "react";
-import { PieChart, Pie, Cell, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
 
 function FacultyStats() {
   const [faculty, setFaculty] = useState("");
   const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleGetStats = () => {
-    if (!faculty) {
+  // Configure backend + credentials
+  const BASE_URL = "http://127.0.0.1:8000";
+  const USERNAME = "admin";
+  const PASSWORD = "supersecretpassword";
+
+  const COLORS = ["#0088FE", "#FF8042", "#00C49F", "#FFBB28", "#A28BFF", "#FF6B8A"];
+
+  const handleGetStats = async () => {
+    setError("");
+    setStats(null);
+
+    if (!faculty || faculty.trim() === "") {
       alert("Please enter faculty name.");
       return;
     }
 
-    // ✅ Replace with real API later
-    const exampleStats = {
-      faculty: "Sajid Ali",
-      total_publications: 28,
-      role_counts: { "Main Author": 21, "Secondary Author": 7 },
-      status_counts: { Published: 26, "Submitted for publication": 1, Accepted: 1 },
-      yearly_counts: {
-        2005: 1, 2006: 2, 2007: 2, 2008: 1, 2009: 2, 2010: 2, 2011: 2,
-        2012: 1, 2013: 2, 2014: 1, 2015: 1, 2016: 1, 2017: 1,
-        2020: 1, 2021: 2, 2022: 3, 2023: 1, 2024: 1, 2025: 1,
-      }
-    };
+    setLoading(true);
+    try {
+      const resp = await fetch(`${BASE_URL}/statistics/person`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Basic " + btoa(`${USERNAME}:${PASSWORD}`),
+        },
+        body: JSON.stringify({ faculty: faculty.trim() }),
+      });
 
-    setStats(exampleStats);
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        throw new Error(txt || `Server returned ${resp.status}`);
+      }
+
+      const json = await resp.json();
+
+      // Ensure returned object shape matches expected response model
+      // (faculty, total_publications, role_counts, status_counts, yearly_counts)
+      setStats(json);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err?.message?.includes("404") ? "No publications found for that faculty." : `Error: ${err.message}`
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Transform role_counts and status_counts into arrays
-  const roleData = stats ? Object.entries(stats.role_counts).map(([key, value]) => ({ name: key, value })) : [];
-  const statusData = stats ? Object.entries(stats.status_counts).map(([key, value]) => ({ name: key, value })) : [];
-  const yearlyData = stats ? Object.entries(stats.yearly_counts).map(([year, value]) => ({ year, count: value })) : [];
+  const clearStats = () => {
+    setStats(null);
+    setError("");
+    setFaculty("");
+  };
 
-  const COLORS = ["#0088FE", "#FF8042", "#00C49F", "#FFBB28"];
+  // Convert role/status/year maps into arrays suitable for recharts
+  const roleData = stats && stats.role_counts
+    ? Object.entries(stats.role_counts).map(([name, value]) => ({ name, value }))
+    : [];
+
+  const statusData = stats && stats.status_counts
+    ? Object.entries(stats.status_counts).map(([name, value]) => ({ name, value }))
+    : [];
+
+  // Sort yearly data ascending by year for the line chart
+  const yearlyData = stats && stats.yearly_counts
+    ? Object.entries(stats.yearly_counts)
+        .map(([year, value]) => ({ year: String(year), count: value }))
+        .sort((a, b) => Number(a.year) - Number(b.year))
+    : [];
 
   return (
     <div style={{ padding: "20px" }}>
       <h2>Faculty Stats</h2>
-      <input
-        type="text"
-        placeholder="Faculty Name (e.g., Sajid Ali)"
-        value={faculty}
-        onChange={(e) => setFaculty(e.target.value)}
-        style={inputStyle}
-      />
-      <button onClick={handleGetStats} style={buttonStyle}>Get Stats</button>
+
+      <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: 8 }}>
+        <input
+          type="text"
+          placeholder="Faculty Name (e.g., Sajid Ali)"
+          value={faculty}
+          onChange={(e) => setFaculty(e.target.value)}
+          style={inputStyle}
+        />
+        <button onClick={handleGetStats} style={buttonStyle} disabled={loading}>
+          {loading ? "Loading..." : "Get Stats"}
+        </button>
+        <button onClick={clearStats} style={{ ...buttonStyle, background: "#888", marginLeft: 6 }}>
+          Clear
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 14, color: "#b00020", fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
 
       {stats && (
-        <div style={{ marginTop: "30px" }}>
-          {/* Summary */}
-          <h3>{stats.faculty}</h3>
-          <p style={{ fontSize: "18px" }}>
-            Total Publications: <b>{stats.total_publications}</b>
-          </p>
+        <div style={{ marginTop: 30 }}>
+          {/* Header / summary */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <div>
+              <h3 style={{ margin: 0 }}>{stats.faculty}</h3>
+              <p style={{ margin: "6px 0 0 0", fontSize: 18 }}>
+                Total Publications: <b>{stats.total_publications}</b>
+              </p>
+            </div>
+          </div>
 
-          {/* Role Pie Chart */}
-          <h4>Role Distribution</h4>
-          <PieChart width={400} height={250}>
-            <Pie data={roleData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
-              {roleData.map((_, index) => (
-                <Cell key={index} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip />
-            <Legend />
-          </PieChart>
+          <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            {/* Role Pie */}
+            <div style={{ background: "#fff", padding: 12, borderRadius: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+              <h4 style={{ marginTop: 0 }}>Role Distribution</h4>
+              {roleData.length === 0 ? (
+                <p style={{ color: "#666" }}>No role data available.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie data={roleData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                      {roleData.map((_, index) => (
+                        <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
 
-          {/* Status Pie Chart */}
-          <h4>Status Distribution</h4>
-          <PieChart width={400} height={250}>
-            <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
-              {statusData.map((_, index) => (
-                <Cell key={index} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip />
-            <Legend />
-          </PieChart>
+            {/* Status Pie */}
+            <div style={{ background: "#fff", padding: 12, borderRadius: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+              <h4 style={{ marginTop: 0 }}>Status Distribution</h4>
+              {statusData.length === 0 ? (
+                <p style={{ color: "#666" }}>No status data available.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                      {statusData.map((_, index) => (
+                        <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
 
-          {/* Yearly Line Chart */}
-          <h4>Publications Over Time</h4>
-          <LineChart width={600} height={300} data={yearlyData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-             dataKey="year"
-            textAnchor="end" 
-            interval={0}
-            angle={-60}
-            height={70}>    
-            </XAxis>
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="count" stroke="#8884d8" />
-          </LineChart>
+            {/* Yearly Line chart (span two columns on small screens) */}
+            <div style={{ gridColumn: "1 / -1", background: "#fff", padding: 12, borderRadius: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+              <h4 style={{ marginTop: 0 }}>Publications Over Time</h4>
+              {yearlyData.length === 0 ? (
+                <p style={{ color: "#666" }}>No yearly data available.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={yearlyData} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="year" interval={0} angle={-60} textAnchor="end" height={70} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="count" stroke="#8884d8" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -102,9 +194,9 @@ function FacultyStats() {
 }
 
 const inputStyle = {
-  width: "100%",
+  width: "320px",
   padding: "10px",
-  margin: "10px 0",
+  margin: "0",
   borderRadius: "6px",
   border: "1px solid #ccc",
   fontSize: "14px",
@@ -112,13 +204,13 @@ const inputStyle = {
 };
 
 const buttonStyle = {
-  padding: "10px 20px",
+  padding: "10px 16px",
   border: "none",
   borderRadius: "6px",
   background: "#1976d2",
   color: "#fff",
   cursor: "pointer",
-  marginTop: "10px",
+  marginTop: 0,
   fontSize: "14px",
 };
 
