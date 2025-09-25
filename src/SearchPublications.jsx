@@ -7,7 +7,8 @@ const BASE_URL = "http://127.0.0.1:8000";
 function SearchPublications() {
   const [q, setQ] = useState("");
   const [matches, setMatches] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // search loading
+  const [loadingResolve, setLoadingResolve] = useState(false); // resolving full pub
   const [error, setError] = useState(null);
   const debounceRef = useRef(null);
   const navigate = useNavigate();
@@ -61,10 +62,45 @@ function SearchPublications() {
     }
   };
 
-  // when user clicks a result row => navigate to update page with publication in state
-  const openForEdit = (pub) => {
-    // Pass the entire object so UpdatePublication can prefill
-    navigate("/update-publication", { state: { publication: pub } });
+  // Try to resolve a full publication object before navigating
+  const openForEdit = async (pub) => {
+    // If pub already contains many fields (Title + Reference / Role etc.), assume it's full enough
+    const looksFull = pub && (pub["Reference"] || pub.Reference || pub.Title) && (pub.Faculty || pub.faculty);
+    if (looksFull) {
+      navigate("/update-publication", { state: { publication: pub } });
+      return;
+    }
+
+    // Otherwise try to fetch full set and find by id
+    if (!pub?.id) {
+      // no id — just navigate with what we have
+      console.warn("Publication has no id; navigating with partial object.", pub);
+      navigate("/update-publication", { state: { publication: pub } });
+      return;
+    }
+
+    setLoadingResolve(true);
+    setError(null);
+    try {
+      const res = await fetch(`${BASE_URL}/get-publications`);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const json = await res.json();
+      const pubs = Array.isArray(json.data) ? json.data : json;
+      const target = pubs.find((p) => String(p.id) === String(pub.id));
+      if (target) {
+        navigate("/update-publication", { state: { publication: target } });
+      } else {
+        // not found: fallback to what we have but warn
+        console.warn(`Full publication with id ${pub.id} not found; navigating with partial object.`, pub);
+        navigate("/update-publication", { state: { publication: pub } });
+      }
+    } catch (err) {
+      console.error("Failed to resolve full publication:", err);
+      // fallback
+      navigate("/update-publication", { state: { publication: pub } });
+    } finally {
+      setLoadingResolve(false);
+    }
   };
 
   const columns = ["id", "Title", "Faculty", "Year", "Status"];
@@ -102,7 +138,7 @@ function SearchPublications() {
             padding: "10px 14px",
             borderRadius: 8,
             border: "none",
-            background: loading ? "#9fd9bd" : "#47af83",
+            background: loading ? "#9fd9bd" : "#1e88e5", // slightly bluer button
             color: "#fff",
             cursor: loading ? "default" : "pointer",
             fontWeight: 700,
@@ -152,9 +188,9 @@ function SearchPublications() {
                 {matches.map((m) => (
                   <tr
                     key={m.id ?? Math.random()}
-                    style={{ borderBottom: "1px solid #eee", cursor: "pointer" }}
+                    style={{ borderBottom: "1px solid #eee", cursor: loadingResolve ? "wait" : "pointer", opacity: loadingResolve ? 0.7 : 1 }}
                     onClick={() => openForEdit(m)}
-                    title="Click to open in Update view"
+                    title={loadingResolve ? "Resolving full publication..." : "Click to open in Update view"}
                   >
                     {columns.map((col) => (
                       <td key={col} style={{ padding: "10px", verticalAlign: "top", fontSize: 13, color: "#222" }}>

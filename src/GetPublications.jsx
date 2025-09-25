@@ -49,30 +49,75 @@ function GetPublications() {
     return s.length > n ? s.slice(0, n) + "… " : s;
   };
 
+  // prominent button styles - extracted so it's easy to tweak
+ const primaryBtn = {
+  padding: "12px 20px",
+  borderRadius: 10,
+  border: "none",
+  background: loading
+    ? "#90caf9" // lighter blue when loading
+    : "linear-gradient(90deg,#1e88e5,#1565c0)", // main blue gradient
+  color: "#fff",
+  cursor: loading ? "default" : "pointer",
+  fontWeight: 800,
+  fontSize: 15,
+  boxShadow: loading ? "none" : "0 6px 18px rgba(21,101,192,0.25)",
+  transition: "transform .12s ease, box-shadow .12s ease, opacity .12s ease",
+  transform: loading ? "none" : "translateY(0)",
+};
+
+  const primaryBtnHover = {
+    transform: "translateY(-2px)",
+    boxShadow: "0 10px 28px rgba(37,150,86,0.22)",
+  };
+
   return (
     <div style={{ padding: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <h2 style={{ margin: 0 }}>📚 Publications List</h2>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {/* big prominent button (near the heading) */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: 6 }}>
           <button
             onClick={handleLoad}
             disabled={loading}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 6,
-              border: "none",
-              background: loading ? "#9fd9bd" : "#47af83",
-              color: "#fff",
-              cursor: loading ? "default" : "pointer",
-              fontWeight: 700,
+            aria-label="Load publications (access key L)"
+            accessKey="l"
+            title="Load publications (Alt+L / Option+L)"
+            style={primaryBtn}
+            onMouseOver={(e) => {
+              if (!loading) Object.assign(e.currentTarget.style, primaryBtnHover);
+            }}
+            onMouseOut={(e) => {
+              if (!loading) Object.assign(e.currentTarget.style, primaryBtn);
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = "0 0 0 4px rgba(47,111,178,0.12), 0 10px 28px rgba(37,150,86,0.22)";
+            }}
+            onBlur={(e) => {
+              if (!loading) e.currentTarget.style.boxShadow = primaryBtn.boxShadow;
             }}
           >
-            {loading ? "Loading..." : "Load Publications"}
+            {loading ? "Loading publications…" : "Load Publications"}
           </button>
 
-          <div style={{ color: "#666", fontSize: 14 }}>
-            {publications.length > 0 && !loading ? `${publications.length} results` : ""}
+          {/* results count (announced to screen readers via aria-live) */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+            <div
+              aria-live="polite"
+              style={{ color: "#666", fontSize: 13, minHeight: 18, marginTop: 2 }}
+            >
+              {publications.length > 0 && !loading ? `${publications.length} results` : ""}
+            </div>
+            {/* small helper hint */}
+            <div style={{ color: "#999", fontSize: 12 }}>Tip: shortcut Alt/Option + L</div>
           </div>
         </div>
       </div>
@@ -107,13 +152,16 @@ function GetPublications() {
         )}
 
         {!loading && publications.length === 0 && !error && (
-          <p style={{ color: "#666", margin: 0 }}>Publications will appear here after you click "Load Publications".</p>
+          <p style={{ color: "#666", margin: 0 }}>
+            Publications will appear here after you click{" "}
+            <strong style={{ color: "#222" }}>Load Publications</strong>.
+          </p>
         )}
 
         {/* Table */}
         {publications.length > 0 && (
           <div style={{ overflowX: "auto", marginTop: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
               <thead>
                 <tr>
                   {columns.map((col) => (

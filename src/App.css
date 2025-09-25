@@ -4,8 +4,8 @@
   --sidebar-closed: 60px;
 
   /* your colors */
-  --bg: #47af83;        /* page background (your green) */
-  --header-bg: #004b87; /* header AKU blue */
+  --bg: #47af83;        /* page background  */
+  --header-bg: #004b87; 
 }
 
 * { box-sizing: border-box; }
@@ -153,3 +153,35 @@ aside {
   box-shadow: 0 2px 6px rgba(0,0,0,.1);
 }
 .stat-card h2{ margin: 0; font-size: 2rem; }
+
+/* ---------- Exporting helper---------- */
+/* hide the real site chrome while exporting and force main content to full-width */
+body.pdf-exporting aside,
+body.pdf-exporting .header {
+  display: none !important;
+}
+
+/* ensure the main content area (your .content) expands to full width */
+body.pdf-exporting .content {
+  margin-left: 0 !important;
+  width: 100% !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+  background: #ffffff; /* printable background */
+  color: #222; /* ensure default text becomes dark for svg fallback */
+}
+
+/* force SVG and Recharts text to be visible/dark for exported PNG */
+body.pdf-exporting svg text,
+body.pdf-exporting .recharts-legend-wrapper text,
+body.pdf-exporting .recharts-tooltip-wrapper,
+body.pdf-exporting .recharts-cartesian-axis-tick-value {
+  fill: #333 !important;
+  color: #333 !important;
+}
+
+/* optional: hide overflow that may come from app chrome artifacts */
+body.pdf-exporting {
+  overflow: visible !important;
+}
+

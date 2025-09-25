@@ -1,5 +1,5 @@
 // UpdatePublication.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
 const BASE_URL = "http://127.0.0.1:8000";
@@ -18,6 +18,7 @@ export default function UpdatePublication() {
   // pubId can come from navPub.id or user-entered
   const [pubId, setPubId] = useState(navPub?.id ?? "");
   const [loadingPub, setLoadingPub] = useState(false);
+  const autoLoadedRef = useRef(false); // avoid double auto-load
 
   // form uses short keys but the payload will map to exact DB column names
   const [form, setForm] = useState({
@@ -37,44 +38,27 @@ export default function UpdatePublication() {
   const [successMsg, setSuccessMsg] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // If nav state provided, prefill form
-  useEffect(() => {
-    if (navPub) {
-      // map keys from backend object (which may use spaced names) into our form field names
-      setForm({
-        entryDate: navPub["Entry Date"] ?? navPub.entryDate ?? "",
-        faculty: navPub.Faculty ?? navPub.faculty ?? "",
-        publicationType: navPub["Publication Type"] ?? navPub.publicationType ?? "",
-        year: (navPub.Year ?? navPub.year ?? "")?.toString?.() ?? "",
-        title: navPub.Title ?? navPub.title ?? "",
-        role: navPub.Role ?? navPub.role ?? "",
-        affiliation: navPub.Affiliation ?? navPub.affiliation ?? "",
-        status: navPub.Status ?? navPub.status ?? "",
-        reference: navPub.Reference ?? navPub.reference ?? "",
-        theme: navPub.Theme ?? navPub.theme ?? "",
-      });
-      setPubId(navPub.id ?? navPub.ID ?? navPub.pub_id ?? navPub.pubId ?? "");
-    }
-  }, [navPub]);
-
-  // If user wants to load by ID (when no nav state)
-  const handleLoadById = async () => {
-    if (!pubId) {
-      setErrorMsg("Please enter a Publication ID to load.");
-      return;
-    }
+  // Helper: load full publication by id and populate the form
+  const loadPublicationById = async (id) => {
+    if (!id) return;
     setLoadingPub(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
     try {
-      const res = await fetch(`${BASE_URL}/get-publications`);
+      const basic = "Basic " + btoa(`${USERNAME}:${PASSWORD}`);
+      const res = await fetch(`${BASE_URL}/get-publications`, {
+        method: "GET",
+        headers: {
+          Authorization: basic,
+        },
+      });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const json = await res.json();
       const pubs = Array.isArray(json.data) ? json.data : json;
-      const target = pubs.find((p) => String(p.id) === String(pubId));
-      if (!target) throw new Error(`Publication with id ${pubId} not found`);
-      // fill form
+      const target = pubs.find((p) => String(p.id) === String(id));
+      if (!target) throw new Error(`Publication with id ${id} not found on server`);
+      // fill form with full object
       setForm({
         entryDate: target["Entry Date"] ?? target.entryDate ?? "",
         faculty: target.Faculty ?? target.faculty ?? "",
@@ -87,13 +71,53 @@ export default function UpdatePublication() {
         reference: target.Reference ?? target.reference ?? "",
         theme: target.Theme ?? target.theme ?? "",
       });
-      setSuccessMsg("Loaded publication into form (editable).");
+      setSuccessMsg("Loaded full publication into form (editable).");
     } catch (err) {
-      console.error("Load by ID failed:", err);
-      setErrorMsg(err.message || "Failed to load publication");
+      console.warn("Auto-load full publication failed:", err);
+      // fallback: if navPub exists, use it (set was likely already done)
+      setErrorMsg(err.message || "Failed to load full publication — using partial data.");
     } finally {
       setLoadingPub(false);
     }
+  };
+
+  // If nav state provided, prefill form and *automatically* attempt to load full record by id
+  useEffect(() => {
+    if (!navPub) return;
+
+    // fill with partial data immediately for faster UX
+    setForm({
+      entryDate: navPub["Entry Date"] ?? navPub.entryDate ?? "",
+      faculty: navPub.Faculty ?? navPub.faculty ?? "",
+      publicationType: navPub["Publication Type"] ?? navPub.publicationType ?? "",
+      year: (navPub.Year ?? navPub.year ?? "")?.toString?.() ?? "",
+      title: navPub.Title ?? navPub.title ?? "",
+      role: navPub.Role ?? navPub.role ?? "",
+      affiliation: navPub.Affiliation ?? navPub.affiliation ?? "",
+      status: navPub.Status ?? navPub.status ?? "",
+      reference: navPub.Reference ?? navPub.reference ?? "",
+      theme: navPub.Theme ?? navPub.theme ?? "",
+    });
+
+    const id = navPub.id ?? navPub.ID ?? navPub.pub_id ?? navPub.pubId ?? null;
+    setPubId(id ?? "");
+
+    // auto-load full publication only once per mount
+    if (id && !autoLoadedRef.current) {
+      autoLoadedRef.current = true;
+      // attempt to fetch full record — don't await here (effect won't block rendering)
+      loadPublicationById(id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navPub]);
+
+  // If user wants to load by ID manually (when no nav state)
+  const handleLoadById = async () => {
+    if (!pubId) {
+      setErrorMsg("Please enter a Publication ID to load.");
+      return;
+    }
+    await loadPublicationById(pubId);
   };
 
   const onChange = (e) => {
@@ -105,11 +129,8 @@ export default function UpdatePublication() {
 
   // build payload with exact DB names
   const buildPayload = () => {
-    const yearVal = form.year === "" ? NoneIfEmpty(null) : parseInt(form.year, 10) || null;
-    // helper to convert empty string to null
-    function NoneIfEmpty(v) {
-      return v === "" ? null : v;
-    }
+    const yearVal = form.year === "" ? null : parseInt(form.year, 10) || null;
+    const NoneIfEmpty = (v) => (v === "" ? null : v);
     return {
       "Entry Date": form.entryDate ? form.entryDate : NoneIfEmpty(null),
       "Faculty": form.faculty || NoneIfEmpty(null),
@@ -181,7 +202,19 @@ export default function UpdatePublication() {
           onChange={(e) => setPubId(e.target.value)}
           style={{ padding: 10, borderRadius: 6, border: "1px solid #ccc", width: 200 }}
         />
-        <button onClick={handleLoadById} disabled={loadingPub} style={{ padding: "8px 12px", borderRadius: 6, border: "none", background: "#47af83", color: "#fff", cursor: loadingPub ? "default" : "pointer", fontWeight: 700 }}>
+        <button
+          onClick={handleLoadById}
+          disabled={loadingPub}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 6,
+            border: "none",
+            background: loadingPub ? "#9fd9bd" : "#47af83",
+            color: "#fff",
+            cursor: loadingPub ? "default" : "pointer",
+            fontWeight: 700,
+          }}
+        >
           {loadingPub ? "Loading..." : "Load"}
         </button>
       </div>
