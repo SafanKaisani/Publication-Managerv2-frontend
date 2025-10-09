@@ -1,5 +1,7 @@
 // ExportFilteredExcel.jsx
+// NOTE: install dependency first: npm install xlsx
 import React, { useState } from "react";
+import * as XLSX from "xlsx";
 
 const BASE_URL = "http://127.0.0.1:8000"; // backend
 const USERNAME = "admin"; // change if needed
@@ -21,6 +23,9 @@ export default function ExportFilteredExcel() {
   const [fileName, setFileName] = useState(null);
   const [filtersApplied, setFiltersApplied] = useState(null);
 
+  // NEW: unique-only export toggle
+  const [uniqueOnly, setUniqueOnly] = useState(false);
+
   // toggle checkbox helper
   const toggle = (value, state, setState) => {
     if (state.includes(value)) setState(state.filter((x) => x !== value));
@@ -33,6 +38,112 @@ export default function ExportFilteredExcel() {
       setFileUrl(null);
       setFileName(null);
     }
+  };
+
+  // helper: fetch raw publications (client-side XLSX path)
+  const fetchAllPublications = async () => {
+    const basic = "Basic " + btoa(`${USERNAME}:${PASSWORD}`);
+    const res = await fetch(`${BASE_URL}/get-publications`, {
+      method: "GET",
+      headers: { Authorization: basic },
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `${res.status} ${res.statusText}`);
+    }
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : (json.data || []);
+  };
+
+  // helper: normalize string
+  const norm = (s) => (s === null || s === undefined ? "" : String(s).trim().toLowerCase());
+
+  // dedupe rows by (year + normalized title)
+  const dedupeRowsByYearTitle = (rows) => {
+    const seen = new Map();
+    for (const r of rows) {
+      const rawYear = r.Year ?? r.year ?? "";
+      const y = String(rawYear).trim();
+      const title = (r.Title ?? r.title ?? "").trim();
+      if (!title) continue;
+      const key = `${y}::${norm(title)}`;
+      if (!seen.has(key)) seen.set(key, r);
+    }
+    return Array.from(seen.values());
+  };
+
+  // Build consistent Excel object
+  const rowToExcelObject = (r) => ({
+    id: r.id ?? r.ID ?? "",
+    "Entry Date": r["Entry Date"] ?? r.entryDate ?? "",
+    Faculty: r.Faculty ?? r.faculty ?? "",
+    "Publication Type": r["Publication Type"] ?? r.publicationType ?? "",
+    Year: r.Year ?? r.year ?? "",
+    Title: r.Title ?? r.title ?? "",
+    Role: r.Role ?? r.role ?? "",
+    Affiliation: r.Affiliation ?? r.affiliation ?? "",
+    Status: r.Status ?? r.status ?? "",
+    Reference: r.Reference ?? r.reference ?? "",
+    Theme: r.Theme ?? r.theme ?? "",
+  });
+
+  // Client-side export path: fetch raw, apply filters, dedupe if requested, build XLSX using SheetJS (XLSX static import)
+  const clientSideExport = async (payload) => {
+    const all = await fetchAllPublications();
+
+    // apply filters on client
+    let filtered = all.filter((r) => {
+      if (payload.faculty) {
+        if (norm(r.Faculty ?? r.faculty ?? "") !== norm(payload.faculty)) return false;
+      }
+      if (payload.year !== undefined && payload.year !== null) {
+        const ry = String(r.Year ?? r.year ?? "").trim();
+        if (String(payload.year) !== ry) return false;
+      } else {
+        if (payload.start_year !== undefined && payload.start_year !== null) {
+          const ry = Number(r.Year ?? r.year ?? "");
+          if (Number.isNaN(ry) || ry < Number(payload.start_year)) return false;
+        }
+        if (payload.end_year !== undefined && payload.end_year !== null) {
+          const ry = Number(r.Year ?? r.year ?? "");
+          if (Number.isNaN(ry) || ry > Number(payload.end_year)) return false;
+        }
+      }
+      if (payload.publication_types && Array.isArray(payload.publication_types) && payload.publication_types.length && !(payload.publication_types.length === 1 && payload.publication_types[0] === "string")) {
+        const p = norm(r["Publication Type"] ?? r.publicationType ?? "");
+        const lowers = payload.publication_types.map((x) => String(x).toLowerCase());
+        if (!lowers.includes(p)) return false;
+      }
+      if (payload.affiliations && Array.isArray(payload.affiliations) && payload.affiliations.length && !(payload.affiliations.length === 1 && payload.affiliations[0] === "string")) {
+        const a = norm(r.Affiliation ?? r.affiliation ?? "");
+        const lowers = payload.affiliations.map((x) => String(x).toLowerCase());
+        if (!lowers.includes(a)) return false;
+      }
+      return true;
+    });
+
+    if (payload.unique_only) filtered = dedupeRowsByYearTitle(filtered);
+
+    const excelRows = filtered.map(rowToExcelObject);
+
+    // Build workbook using statically-imported XLSX
+    const ws = XLSX.utils.json_to_sheet(excelRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Publications");
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    const fname = `publications_filtered_${payload.unique_only ? "unique_" : ""}${new Date().toISOString().replace(/[:.-]/g, "")}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    setFileUrl(url);
+    setFileName(fname);
+
+    // auto-download
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const handleRequestExport = async () => {
@@ -49,14 +160,11 @@ export default function ExportFilteredExcel() {
 
     // build payload: include only keys that user supplied
     const payload = {};
-    // faculty: ignore empty or whitespace-only
     if (String(faculty).trim() !== "") payload.faculty = faculty.trim();
     if (hasYear) {
-      // backend expects integer (0 treated as not provided). we'll parse int here.
       const iv = parseInt(year, 10);
       if (!Number.isNaN(iv)) payload.year = iv;
     } else {
-      // range fields: only include if user filled them
       if (String(startYear).trim() !== "") {
         const sv = parseInt(startYear, 10);
         if (!Number.isNaN(sv)) payload.start_year = sv;
@@ -69,9 +177,8 @@ export default function ExportFilteredExcel() {
 
     payload.publication_types = pubTypes.length ? pubTypes : ["string"];
     payload.affiliations = affiliations.length ? affiliations : ["string"];
+    payload.unique_only = !!uniqueOnly;
 
-
-    // Save filtersApplied for title display (frontend only)
     setFiltersApplied({
       faculty: payload.faculty || null,
       year: payload.year ?? null,
@@ -79,14 +186,19 @@ export default function ExportFilteredExcel() {
       end_year: payload.end_year ?? null,
       publication_types: payload.publication_types ?? [],
       affiliations: payload.affiliations ?? [],
+      unique_only: payload.unique_only,
     });
 
     setLoading(true);
-
-    // cleanup old blob if any
     cleanupBlob();
 
     try {
+      if (uniqueOnly) {
+        await clientSideExport(payload);
+        setLoading(false);
+        return;
+      }
+
       const basic = "Basic " + btoa(`${USERNAME}:${PASSWORD}`);
       const res = await fetch(`${BASE_URL}/export-publications-excel`, {
         method: "POST",
@@ -98,7 +210,6 @@ export default function ExportFilteredExcel() {
       });
 
       if (!res.ok) {
-        // try to get JSON error detail
         let msg = `${res.status} ${res.statusText}`;
         try {
           const j = await res.json();
@@ -108,8 +219,6 @@ export default function ExportFilteredExcel() {
       }
 
       const blob = await res.blob();
-
-      // extract filename from content-disposition (preserve exact backend name)
       const cd = res.headers.get("content-disposition") || "";
       const match = cd.match(/filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i);
       const extracted = match ? decodeURIComponent(match[1] || match[2] || match[3] || "") : null;
@@ -148,7 +257,6 @@ export default function ExportFilteredExcel() {
     <div style={{ padding: 20 }}>
       <h2>Export Filtered Excel</h2>
 
-      {/* Filters applied title */}
       {filtersApplied && (
         <div style={{ marginBottom: 12, color: "#333" }}>
           <strong>Filters requested:</strong>{" "}
@@ -162,8 +270,9 @@ export default function ExportFilteredExcel() {
               ? `Types=[${filtersApplied.publication_types.join(", ")}] · `
               : ""}
             {filtersApplied.affiliations && filtersApplied.affiliations.length
-              ? `Aff=[${filtersApplied.affiliations.join(", ")}]`
+              ? `Aff=[${filtersApplied.affiliations.join(", ")}] · `
               : ""}
+            {filtersApplied.unique_only ? `UniqueOnly=${filtersApplied.unique_only}` : ""}
           </span>
         </div>
       )}
@@ -174,7 +283,6 @@ export default function ExportFilteredExcel() {
       </p>
 
       <div style={{ maxWidth: 680 }}>
-        {/* Faculty */}
         <input
           type="text"
           placeholder="Faculty (optional, e.g., Sajid Ali)"
@@ -183,7 +291,6 @@ export default function ExportFilteredExcel() {
           style={inputStyle}
         />
 
-        {/* Year (single) */}
         <input
           type="number"
           placeholder="Year (e.g., 2020)"
@@ -196,7 +303,6 @@ export default function ExportFilteredExcel() {
 
         <div style={{ textAlign: "center", margin: "10px 0" }}>— OR —</div>
 
-        {/* Start / End Year */}
         <input
           type="number"
           placeholder="Start Year (e.g., 2015)"
@@ -216,7 +322,6 @@ export default function ExportFilteredExcel() {
           style={inputStyle}
         />
 
-        {/* Publication Types */}
         <label style={{ fontWeight: "bold", marginTop: 10, display: "block" }}>Publication Types</label>
         <div style={checkboxGroupStyle}>
           {pubTypeOptions.map((t) => (
@@ -231,7 +336,6 @@ export default function ExportFilteredExcel() {
           ))}
         </div>
 
-        {/* Affiliations */}
         <label style={{ fontWeight: "bold", marginTop: 10, display: "block" }}>Affiliations</label>
         <div style={checkboxGroupStyle}>
           {affiliationOptions.map((a) => (
@@ -246,7 +350,16 @@ export default function ExportFilteredExcel() {
           ))}
         </div>
 
-        {/* Actions */}
+        <div style={{ marginTop: 10 }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={uniqueOnly} onChange={(e) => setUniqueOnly(e.target.checked)} />
+            <span style={{ fontSize: 14 }}>Export unique rows only (dedupe by Title per Year)</span>
+          </label>
+          <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+            When checked, the client will fetch publications and deduplicate by title+year, then generate the Excel file in-browser.
+          </div>
+        </div>
+
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>
           <button
             onClick={handleRequestExport}
